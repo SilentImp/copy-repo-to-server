@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ua">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Скопіювати репозиторій</title>
+  <style>
+    body {
+      min-height: 100vh;
+      padding: 0;
+      margin: 0;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: sans-serif;
+    }
+
+    form {
+      position: relative;
+    }
+
+    fieldset:disabled,
+    button:disabled {
+      opacity: .35;
+      transition: opacity .3s;
+    }
+
+    fieldset,
+    button {
+      opacity: 1;
+      transition: opacity .3s;
+    }
+
+    form.loading::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      margin-top: -30px;
+      margin-left: -30px;
+      width: 50px;
+      height: 50px;
+      border-radius: 50px;
+      border: 5px solid grey;
+      border-top-color: black;
+      animation: loading 2s linear infinite;
+    }
+
+    fieldset {
+      margin-block-end: 1rem;
+    }
+
+    label {
+      display: block;
+      margin-block-end: 1rem;
+    }
+
+    label:last-child {
+      margin-block-end: 0;
+    }
+
+    input {
+      display: block;
+      width: 100%;
+    }
+
+    @keyframes loading {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <form action="/copy" method="POST">
+    <fieldset>
+      <legend>Скопіювати репозиторій</legend>
+      <label>
+        Назва репозиторія:
+        <input
+          required
+          type="text"
+          name="repository"
+          autofocus
+          placeholder="dialog-explainer"
+          list="repositoryList"
+          value=""
+          />
+      </label>
+      <label>
+        Ваш пароль:
+        <input required type="password" name="password" autocomplete="current-password" placeholder="Слава Україні"
+          value="">
+      </label>
+    </fieldset>
+    <button>Скопіювати</button>
+  </form>
+
+  <dialog>
+    <p>Репозиторій скопіювали! Посилання:</p>
+    <ul>
+      <li><a id="dialog-repo" href="">Репозіторій який створено: <i></i></a></li>
+    </ul>
+    <p>Бажаєте скопіювати ще один?</p>
+    <form method="dialog">
+      <button>Так</button>
+    </form>
+  </dialog>
+
+  <datalist id="repositoryList"></datalist>
+
+  <script>
+    (function () {
+      const repoURL = repository => new URL(`https://github.com/prjctr-ytb-code/${repository}/`);
+      const dialog = document.querySelector('dialog');
+      const dialogRepoElement = dialog.querySelector('#dialog-repo i');
+      const form = document.querySelector('form');
+      const inviteMoreButton = dialog.querySelector('button');
+      const inviteButton = form.querySelector('button');
+      const fieldset = form.querySelector('fieldset');
+      const repositoryInput = fieldset.querySelector('[name="repository"]');
+      const passwordInput = fieldset.querySelector('[name="password"]');
+      const datalistElement = document.getElementById('repositoryList');
+      const inputs = {
+        repository: repositoryInput,
+        password: passwordInput,
+      };
+
+      console.log(dialogRepoElement);
+
+      const updateDataList = async () => {
+        try {
+          const response = await fetch('/datalist');
+          if (response.status !== 200) throw new Error(`Can't get datalist`);
+          const data = await response.json();
+          const options = new DocumentFragment();
+          data.forEach((name) => {
+            const element = document.createElement('OPTION');
+            element.value = name;
+            options.append(element);
+          })
+          datalistElement.replaceChildren(options);
+
+        } catch (error) {
+          console.log(error.message);
+        }
+      }
+
+      updateDataList();
+
+      const submitHandler = async (event) => {
+
+        event.preventDefault();
+        const form = event.currentTarget;
+
+        const body = new FormData(form);
+        inviteButton.setAttribute('disabled', true);
+        fieldset.setAttribute('disabled', true);
+        form.classList.toggle('loading', true);
+
+        try {
+          const response = await fetch(
+            form.getAttribute('action'),
+            {
+              method: form.getAttribute('method'),
+              body,
+            });
+
+          inviteButton.removeAttribute('disabled');
+          fieldset.removeAttribute('disabled');
+          form.classList.toggle('loading', false);
+
+          if (response.status === 204) {
+            repositoryInput.value = "";
+            const repo = repoURL(body.get('repository')).href;
+            dialogRepoElement.textContent = repo;
+            dialogRepoElement.parentNode.setAttribute('href', repo);
+            form.hidden = true;
+            dialog.showModal();
+          } else {
+            let data;
+            try {
+              data = await response.json();
+              if (data.length === 0) {
+                inviteButton.setCustomValidity('Репозиторій не було скопійовано через помилку');
+              }
+              if (data.length > 0) {
+                data.forEach(({ path, msg, message }) => {
+                  if (inputs[path] !== undefined) {
+                    inputs[path].setCustomValidity(msg);
+                  } else {
+                    inviteButton.setCustomValidity('Репозиторій не було скопійовано через помилку');
+                  }
+                });
+              }
+              form.reportValidity();
+            } catch (error) {
+              inviteButton.setCustomValidity('Репозиторій не було скопійовано через помилку');
+              inviteButton.removeAttribute('disabled');
+              fieldset.removeAttribute('disabled');
+              form.classList.toggle('loading', false);
+              form.reportValidity();
+            }
+          }
+        } catch (error) {
+          console.log('fetch error');
+          inviteButton.setCustomValidity('Репозиторій не було скопійовано через помилку');
+          inviteButton.removeAttribute('disabled');
+          fieldset.removeAttribute('disabled');
+          form.classList.toggle('loading', false);
+          form.reportValidity();
+        }
+      };
+
+      const inviteMoreHandler = () => {
+        form.hidden = false;
+        requestAnimationFrame(() => {
+          repositoryInput.focus();
+        });
+      };
+
+      inviteMoreButton.addEventListener('click', inviteMoreHandler);
+      form.addEventListener('submit', submitHandler);
+      inviteButton.addEventListener('click', () => {
+        inviteButton.setCustomValidity('');
+        repositoryInput.setCustomValidity('');
+        passwordInput.setCustomValidity('');
+
+        form.checkValidity();
+      });
+
+    })();
+  </script>
+</body>
+
+</html>
