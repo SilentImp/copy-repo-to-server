@@ -8,6 +8,7 @@ node server.js
 # Збірка контейнера та публікація у реєстр
 ```
 docker buildx build --platform linux/amd64 -t silentimp/copy-repo-to ./
+docker build -t silentimp/copy-repo-to ./
 docker push silentimp/copy-repo-to       
 ```
 
